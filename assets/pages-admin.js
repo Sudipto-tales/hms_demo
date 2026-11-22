@@ -1412,6 +1412,7 @@
   on('gate-lock', () => { gate.until = 0; gate.step = 'pin'; toast('Locked', 'Enter your PIN to open these pages again', 'slate', 'lock'); rerender(); });
   on('gate-support', () => toast('Support request sent', 'Platform support verifies the owner by video call, then resets access.', 'sky', 'life-buoy'));
 
+  window.PGAdmin = { A };
   /* ---------------- register ---------------- */
   K.register({
     subscription:        { title: 'Subscription', sub: 'Your HMS plan, usage, billing cycle and GST invoices.', render: renderSubscription },

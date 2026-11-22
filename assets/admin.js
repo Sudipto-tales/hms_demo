@@ -420,7 +420,8 @@
       <div class="flex items-center justify-between gap-2 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
         ${can('staff:deactivate') ? (e.active ? `<button class="text-sm font-semibold text-rose-600 hover:underline dark:text-rose-400" data-adm-do="deactivate" data-id="${e.id}">Deactivate employee</button>`
           : `<button class="text-sm font-semibold text-emerald-600 hover:underline" data-adm-do="reactivate" data-id="${e.id}">Reactivate employee</button>`) : '<span></span>'}
-        <button class="h-9 rounded-xl border border-slate-200 px-4 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" data-close-modal>Close</button>
+        <div class="flex gap-2"><button class="h-9 rounded-xl border border-slate-200 px-4 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" data-close-modal>Close</button>
+          <button class="inline-flex h-9 items-center gap-1.5 rounded-xl bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700" data-pg="pf-open" data-id="${e.id}" data-close-modal><i data-lucide="user-round" class="h-4 w-4"></i>Full profile</button></div>
       </div>`;
     H().icons();
   }

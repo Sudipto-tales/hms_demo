@@ -228,6 +228,11 @@
             'General Medicine': 'Viral fever (A99)', ENT: 'Acute pharyngitis (J02.9)', Gynecology: 'Routine antenatal check (Z34)' }[a.dept] || 'Follow-up',
       items: (rxLines[a.dept] || rxLines['General Medicine']).map(([d, f, dur]) => ({ drug: d, freq: f, dur, note: f === 'SOS' ? 'If fever > 100°F' : 'After food' })),
       status: i === 0 ? 'sent' : i < 3 ? 'dispensed' : 'issued' }));
+    // A handwritten prescription the front desk photographed this morning (see pages-rxscan.js).
+    const sa = t.appointments.find(a => a.status === 'completed' && a !== t.appointments[0]) || t.appointments[1];
+    if (sa && window.PGRxScan) prescriptions.unshift({ id: 'RX-7799', kind: 'scan', patient: sa.patient, mrn: sa.mrn, doctor: sa.doctor, dept: sa.dept, date: iso(today), dx: 'Paper prescription',
+      items: [], status: 'sent', shared: true, uploadedBy: ROLES.receptionist.person, uploadedAt: 'Today 09:52',
+      pages: [{ type: 'image', name: 'camera-1.jpg', src: window.PGRxScan.sampleScan(sa.doctor, sa.patient, [['Tab. Paracetamol 650', '1 — 1 — 1 × 3 days, after food'], ['Tab. Cetirizine 10', '0 — 0 — 1 × 5 days'], ['ORS sachet', '1 in 1 L water, sip through the day']]) }] });
 
     const TESTS = [['Complete Blood Count', 'Haematology', 350], ['Lipid Profile', 'Biochemistry', 650], ['HbA1c', 'Biochemistry', 520], ['Thyroid Profile (T3/T4/TSH)', 'Immunology', 780],
       ['Liver Function Test', 'Biochemistry', 720], ['Urine Routine', 'Pathology', 180], ['Dengue NS1', 'Serology', 900], ['Serum Creatinine', 'Biochemistry', 240]];
@@ -301,6 +306,9 @@
       return { id: 'INV-' + (20931 + i), patient: p.name, mrn: p.mrn, date: iso(addDays(today, -Math.floor(i / 3))), items, total, paid,
         mode: paid ? pick(['UPI', 'Cash', 'Card']) : '', status: paid === total ? 'paid' : paid ? 'partial' : 'due', payer: p.insurance && i % 2 ? p.insurance : 'Self' };
     });
+    // The portal persona has one unpaid lab bill, so the floating "Pay" button has something to show.
+    const me_ = patients.find(p => p.name === ROLES.patient.person);
+    if (me_) invoices.push({ id: 'INV-' + (20931 + invoices.length), patient: me_.name, mrn: me_.mrn, date: iso(today), items: [{ desc: 'Lipid Profile', qty: 1, rate: 650 }, { desc: 'ECG', qty: 1, rate: 400 }], total: 1050, paid: 0, mode: '', status: 'due', payer: 'Self' });
 
     const audit = [
       ['Dr. Anita Sen', 'role.update', 'Gave HR Manager the payroll:process permission', 'Main Branch', '10.0.4.21', 6 * 1440, 'shield-check'],

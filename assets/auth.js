@@ -13,6 +13,8 @@ const Auth = (() => {
       question: 'In which city were you born?', answer: 'pune' },
     { id: 'doctor', login: ['doctor', 'doctor@sunhospital.in'], password: 'Doctor@123', role: 'doctor', name: 'Dr. Arjun Mehta', title: 'Cardiologist' },
     { id: 'reception', login: ['reception', 'reception@sunhospital.in'], password: 'Front@123', role: 'reception', name: 'Riya Das', title: 'Front Desk' },
+    // A pharmacy is one system with a single login.
+    { id: 'pharmacy', login: ['pharmacy', 'pharmacy@sunhospital.in'], password: 'Pharma@123', role: 'pharmacy', name: 'Main Pharmacy', title: 'Pharmacy account' },
   ];
   const findUser = (login) => USERS.find((u) => u.login.includes(String(login).trim().toLowerCase()));
   const userById = (id) => USERS.find((u) => u.id === id);

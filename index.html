@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+  <script src="assets/route.js"></script>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sign in — HMS Cloud</title>
@@ -8,7 +9,7 @@
     // Already signed in (session < 8h old)? Skip the login and open the dashboard.
     try {
       const s = JSON.parse(localStorage.getItem('hms-session') || 'null');
-      if (s && s.exp > Date.now()) location.replace('dashboard.html');
+      if (s && s.exp > Date.now()) location.replace(ROUTE('dashboard'));
     } catch (e) {}
     try {
       const t = localStorage.getItem('hms-theme');
@@ -386,8 +387,8 @@
         <button data-go="creds" class="mt-3 text-sm ${link}">Sign in as someone else</button>
       </div>`;
       refreshDemo();
-      let n = 5; const t = setInterval(() => { if (S.step !== 'done') return clearInterval(t); $('#redir').textContent = `(${n})`; if (n-- <= 0) { clearInterval(t); location.replace('dashboard.html'); } }, 1000);
-      $('#goDash').onclick = () => location.replace('dashboard.html');
+      let n = 5; const t = setInterval(() => { if (S.step !== 'done') return clearInterval(t); $('#redir').textContent = `(${n})`; if (n-- <= 0) { clearInterval(t); location.replace(ROUTE('dashboard')); } }, 1000);
+      $('#goDash').onclick = () => location.replace(ROUTE('dashboard'));
     },
   };
 
@@ -397,7 +398,7 @@
     if (S.stopListen) S.stopListen();
     const session = Auth.token();
     const exp = Date.now() + QR_TTL * 1000;
-    const url = new URL('verify.html', location.href);
+    const url = new URL(ROUTE('verify'), location.href);
     url.search = new URLSearchParams({ s: session, u: S.user.id, exp, d: Auth.device() }).toString();
     S.qr = { session, exp, url: url.href };
 

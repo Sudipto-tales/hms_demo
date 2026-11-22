@@ -117,3 +117,25 @@ body.test-on #testFab { transform: translate(0, -50%); }
 @keyframes drawCheck { to { stroke-dashoffset: 0; } }
 .ecg path { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: ecg 4s linear infinite; }
 @keyframes ecg { 60% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+
+/* ---------- Profile ---------- */
+.pf-cover {
+  background:
+    radial-gradient(circle at 12% 30%, rgb(255 255 255 / .18) 0 18%, transparent 19%),
+    linear-gradient(112deg, #2dd4bf 0 34%, #99f6e4 34% 56%, #fde4cf 56% 67%, #fbb6c1 67% 100%);
+}
+.dark .pf-cover {
+  background:
+    radial-gradient(circle at 12% 30%, rgb(255 255 255 / .05) 0 18%, transparent 19%),
+    linear-gradient(112deg, #0f766e 0 34%, #134e4a 34% 56%, #4a3426 56% 67%, #5b2131 67% 100%);
+}
+.pf-photo { background-image: linear-gradient(135deg, rgb(255 255 255 / .35), transparent 60%); }
+
+/* ---------- Printing a single document (invoice, slip, health card) ---------- */
+@media print {
+  body * { visibility: hidden !important; }
+  .print-area, .print-area * { visibility: visible !important; }
+  .print-area { position: absolute !important; left: 0; top: 0; width: 100%; max-width: 760px; }
+  .print-area .pc-in { transform: none !important; }
+  #assistFab, #assistBox, #payFab { display: none !important; }
+}

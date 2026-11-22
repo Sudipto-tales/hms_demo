@@ -42,7 +42,7 @@
     c.innerHTML = `<div class="fade-in space-y-5">${notMe}
       ${hero('from-emerald-600 to-teal-500', 'stethoscope', `${greet()}, Dr. ${esc(name.split(' ').pop())}`,
         `${live.length} patients today · ${waiting.length} waiting · ${hrs ? `OPD ${hrs[0]}–${hrs[1]} in ${esc(sch.room || '')}` : 'No OPD today'}`,
-        `<div class="flex flex-wrap gap-2">${can('prescription:write') && mod('prescriptions') ? heroGhost('Write prescription', 'file-text', 'data-pg="rx-new"') : ''}${heroGhost('My schedule', 'calendar-clock', 'data-nav="doctors:schedules"')}</div>`)}
+        `<div class="flex flex-wrap gap-2">${can('prescription:write') && mod('prescriptions') ? heroGhost('Write prescription', 'file-text', 'data-pg="rx-new"') : ''}${can('prescription:upload') && mod('prescriptions') ? heroGhost('Upload paper Rx', 'camera', 'data-pg="rxu-new"') : ''}${heroGhost('My schedule', 'calendar-clock', 'data-nav="doctors:schedules"')}</div>`)}
 
       ${tiles([tile('users', 'teal', 'Patients today', live.length), tile('circle-check', 'emerald', 'Seen', seen.length, live.length ? Math.round(seen.length / live.length * 100) + '%' : ''),
         tile('armchair', 'sky', 'Waiting now', waiting.length), tile('flask-round', results.some(l => l.critical) ? 'rose' : 'violet', 'Results to review', results.length + imaging.length)])}
@@ -206,7 +206,7 @@
     c.innerHTML = `<div class="fade-in space-y-5">
       ${hero('from-sky-600 to-cyan-500', 'concierge-bell', `${greet()}, ${esc(me().person.split(' ')[0])}`,
         `Front desk · ${esc(T().branches[H().state.branch].split(' · ')[0])} · ${toCome.length} still to arrive · ${waiting.length} in the waiting area`,
-        `<div class="flex flex-wrap gap-2">${can('appointment:create') ? heroBtn('Book appointment', 'calendar-plus', 'data-action="new-appointment"') : ''}${can('patient:create') ? heroGhost('Register patient', 'user-plus', 'data-nav="patients:new"') : ''}${can('invoice:create') ? heroGhost('New bill', 'receipt', 'data-pg="inv-new"') : ''}</div>`)}
+        `<div class="flex flex-wrap gap-2">${can('appointment:create') ? heroBtn('Book appointment', 'calendar-plus', 'data-action="new-appointment"') : ''}${can('patient:create') ? heroGhost('Register patient', 'user-plus', 'data-nav="patients:new"') : ''}${can('prescription:upload') && mod('prescriptions') ? heroGhost('Upload prescription', 'camera', 'data-pg="rxu-new"') : ''}${can('invoice:create') ? heroGhost('New bill', 'receipt', 'data-pg="inv-new"') : ''}</div>`)}
 
       ${tiles([tile('calendar-check', 'sky', 'Appointments today', A.filter(a => a.status !== 'cancelled').length), tile('log-in', 'emerald', 'Arrived', arrived.length),
         tile('hourglass', late.length ? 'rose' : 'amber', 'Still to arrive', toCome.length, late.length ? `${late.length} late` : ''), tile('receipt', 'teal', 'Billed today', inr(billedToday.reduce((s, i) => s + i.total, 0)))])}
@@ -218,7 +218,7 @@
             ${q ? `<ul class="mt-2 divide-y divide-slate-100 dark:divide-slate-800">${hits.map(p => { const a = A.find(x => x.mrn === p.mrn);
               return `<li class="flex flex-wrap items-center gap-3 py-2.5">${avatar(p.name, p.gender === 'F' ? 'rose' : 'sky')}<div class="min-w-[160px] flex-1"><p class="text-sm font-medium">${esc(p.name)}</p><p class="text-xs text-slate-500"><span class="font-mono">${p.mrn}</span> · ${p.age}${p.gender} · •••• ${p.phone.slice(-4)}${a ? ` · <b class="text-sky-600">today ${a.time}</b>` : ''}</p></div>
                 ${a && ['pending', 'confirmed'].includes(a.status) ? btn('primary', 'Check in', 'log-in', `data-pg="q" data-do="checkin" data-id="${a.id}"`, 'h-8 px-3') : ''}
-                ${btn('ghost', 'Open', '', `data-pg="patient" data-id="${p.mrn}"`, 'h-8 px-3')}${can('appointment:create') && !a ? btn('soft', 'Book', 'calendar-plus', 'data-action="new-appointment"', 'h-8 px-3') : ''}</li>`; }).join('')
+                ${can('prescription:upload') && mod('prescriptions') ? btn('soft', 'Upload Rx', 'camera', `data-pg="rxu-new" data-mrn="${p.mrn}"`, 'h-8 px-3') : ''}${btn('ghost', 'Open', '', `data-pg="patient" data-id="${p.mrn}"`, 'h-8 px-3')}${can('appointment:create') && !a ? btn('soft', 'Book', 'calendar-plus', 'data-action="new-appointment"', 'h-8 px-3') : ''}</li>`; }).join('')
               || `<li class="flex flex-wrap items-center justify-between gap-3 py-3 text-sm text-slate-500">No patient found for “${esc(ui.rsq)}”.${can('patient:create') ? btn('primary', 'Register new', 'user-plus', 'data-nav="patients:new"', 'h-8 px-3') : ''}</li>`}</ul>` : ''}</div>
 
           <div class="${card}">${cardHead('Arrivals', `${arrived.length} of ${A.filter(a => a.status !== 'cancelled').length} arrived`, btn('ghost', 'OPD queue', 'arrow-right', 'data-nav="appointments:queue"', 'h-8 px-3'))}
@@ -230,6 +230,7 @@
                 ${isLate ? badge('rose', 'Late', 'clock') : ''}${badge(t, l)}
                 <div class="flex gap-1">${a.status === 'pending' ? btn('ghost', 'Confirm', 'message-circle', `data-pg="rc-confirm" data-id="${a.id}"`, 'h-8 px-2.5') : ''}
                   ${['pending', 'confirmed'].includes(a.status) ? btn('primary', 'Check in', 'log-in', `data-pg="q" data-do="checkin" data-id="${a.id}"`, 'h-8 px-2.5') : ''}
+                  ${['with-doctor', 'completed'].includes(a.status) && can('prescription:upload') && mod('prescriptions') ? (d.prescriptions.some(r => r.mrn === a.mrn && r.date === todayISO()) ? badge('violet', 'Rx saved', 'file-check') : btn('soft', 'Upload Rx', 'camera', `data-pg="rxu-new" data-mrn="${a.mrn}"`, 'h-8 px-2.5')) : ''}
                   ${iconBtn('info', 'Details', `data-appt="${a.id}"`)}</div></li>`; }).join('')}</ul></div>
         </div>
 

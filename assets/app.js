@@ -65,7 +65,7 @@
   /* ---------------- state ---------------- */
   let TENANTS = makeTenants();
   const state = {
-    tenant: 'sun', branch: 0, role: ({ admin: 'admin', doctor: 'doctor', reception: 'receptionist' })[window.HMS_SESSION?.role] || 'admin',
+    tenant: 'sun', branch: 0, role: ({ admin: 'admin', doctor: 'doctor', reception: 'receptionist', pharmacy: 'pharmacy' })[window.HMS_SESSION?.role] || 'admin',
     modules: new Set(PLANS.pro.modules), plan: 'pro',
     active: 'dashboard:overview', open: new Set(['dashboard']),
     range: 'monthly', filter: 'all', query: '',
@@ -78,7 +78,8 @@
   const isPatient = () => state.role === 'patient';
   // Permissions come from the tenant role the persona holds — edit the role, the view changes.
   const rolePerms = () => { const tr = ROLES[state.role].tenantRole; return tr ? T().roles[tr]?.perms || [] : []; };
-  const hasPerm = p => { if (!p) return true; const ps = rolePerms(); return ps === '*' || ps.includes(p); };
+  // 'a|b' means either permission is enough.
+  const hasPerm = p => { if (!p) return true; const ps = rolePerms(); return ps === '*' || String(p).split('|').some(x => ps.includes(x)); };
   const navSource = () => (isPatient() ? PATIENT_NAV : NAV);
   const allNavItems = () => [...NAV, ...PATIENT_NAV].flatMap(g => g.items.flatMap(i => [
     { ...i, _self: g.self, _patient: g.patient },
@@ -87,7 +88,7 @@
   const itemVisible = it => {
     if (isPatient()) return !!it._patient;
     if (it._patient) return false;
-    if (it._self) return true;
+    if (it._self) return !ROLES[state.role].system;   // system accounts (a pharmacy) have no HR self-service
     return modOn(it.module) && hasPerm(it.perm);
   };
   const canOpen = id => {
@@ -765,7 +766,7 @@
   /* End the session (see Auth.startSession in assets/auth.js) and return to the login page. */
   function signOut() {
     try { localStorage.removeItem('hms-session'); } catch (e) {}
-    location.replace('index.html');
+    location.replace(window.ROUTE ? ROUTE('index') : 'index.html');
   }
 
   let systemCb = null;

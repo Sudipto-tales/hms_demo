@@ -77,19 +77,34 @@
     const d = D(), p = d.patients.find(x => x.mrn === mrn); if (!p) return;
     ui.ptab = tab || ui.ptab || 'overview';
     const visits = T().appointments.filter(a => a.mrn === mrn), rx = d.prescriptions.filter(r => r.mrn === mrn), labs = d.labOrders.filter(l => l.mrn === mrn), inv = d.invoices.filter(i => i.mrn === mrn);
-    const tabs = [['overview', 'Overview'], ['visits', 'Visits', visits.length + rx.length], ['labs', 'Lab', labs.length], ['bills', 'Bills', inv.length]];
+    const tabs = [['overview', 'Overview'], ['visits', 'Visits', visits.length], ['rx', 'Prescriptions', rx.length], ['labs', 'Lab', labs.length], ['bills', 'Bills', inv.length]];
+    const S = window.PGRxScan, canUp = can('prescription:upload') && H().modOn('prescriptions');
+    const dueAmt = inv.filter(i => i.status === 'due' || i.status === 'partial').reduce((s, i) => s + i.total - i.paid, 0);
+    if (dueAmt) tabs[4][1] = 'Bills ●';
     const bodies = {
       overview: `${!p.consent ? note('amber', 'file-warning', '<b>DPDP consent not captured.</b> Ask the patient to accept the data-processing notice before sharing reports.') + '<div class="h-4"></div>' : ''}
+        <div class="mb-5 rounded-2xl bg-gradient-to-b from-slate-50 to-transparent px-2 pb-2 pt-5 dark:from-slate-800/40">${window.PGExtras.cardBlock(p)}</div>
         ${dl([['MRN', `<span class="font-mono">${p.mrn}</span>`], ['Age / Sex', `${p.age} / ${p.gender === 'F' ? 'Female' : 'Male'}`], ['Blood group', p.blood], ['Phone', '•••• ' + p.phone.slice(-4)],
           ['Registered', fmtDate(p.registered)], ['Home branch', branchName(p.branch)], ['Insurance', p.insurance || 'Self-pay'], ['Allergies', p.allergies ? `<span class="text-rose-600">${esc(p.allergies)}</span>` : 'None known']])}`,
-      visits: (visits.map(a => `<li class="flex items-center gap-3 py-2.5"><span class="grid h-8 w-8 place-items-center rounded-lg ${K.tone('teal')}">${ico('calendar-check')}</span><div class="flex-1 text-sm"><p class="font-medium">${esc(a.dept)} · ${esc(a.type)}</p><p class="text-xs text-slate-500">Today ${a.time} · ${esc(a.doctor)}</p></div>${apptBadge(a.status)}</li>`).join('') +
-        rx.map(r => `<li class="flex items-center gap-3 py-2.5"><span class="grid h-8 w-8 place-items-center rounded-lg ${K.tone('sky')}">${ico('file-text')}</span><div class="flex-1 text-sm"><p class="font-medium">${esc(r.dx)}</p><p class="text-xs text-slate-500">${fmtShort(r.date)} · ${esc(r.doctor)} · ${r.items.length} medicines</p></div><span class="font-mono text-xs text-slate-400">${r.id}</span></li>`).join('')) || '<li class="py-6 text-center text-sm text-slate-500">No visits in this branch yet.</li>',
+      visits: visits.map(a => `<li class="flex items-center gap-3 py-2.5"><span class="grid h-8 w-8 place-items-center rounded-lg ${K.tone('teal')}">${ico('calendar-check')}</span><div class="flex-1 text-sm"><p class="font-medium">${esc(a.dept)} · ${esc(a.type)}</p><p class="text-xs text-slate-500">Today ${a.time} · ${esc(a.doctor)}</p></div>${apptBadge(a.status)}
+          ${canUp && ['with-doctor', 'completed'].includes(a.status) && !rx.some(r => r.date === todayISO() && r.doctor === a.doctor) ? btn('soft', 'Upload Rx', 'camera', `data-pg="rxu-new" data-mrn="${p.mrn}" data-back="${p.mrn}"`, 'h-8 px-2.5') : ''}</li>`).join('') || '<li class="py-6 text-center text-sm text-slate-500">No visits in this branch yet.</li>',
+      rx: (canUp ? `<li class="pb-3"><button type="button" class="flex w-full items-center gap-3 rounded-xl border-2 border-dashed border-violet-200 bg-violet-50/50 p-3 text-left transition hover:border-violet-400 hover:bg-violet-50 dark:border-violet-500/30 dark:bg-violet-500/5" data-pg="rxu-new" data-mrn="${p.mrn}" data-back="${p.mrn}">
+          <span class="grid h-10 w-10 place-items-center rounded-xl bg-violet-600 text-white">${ico('camera', 'h-5 w-5')}</span><span class="flex-1 text-sm"><b class="text-violet-800 dark:text-violet-200">Upload paper prescription</b><span class="block text-xs text-slate-500">Photo with the camera, a scan or a PDF${S.hasPharmacy() ? ' · goes straight to the pharmacy' : ''}</span></span>${ico('chevron-right', 'h-4 w-4 text-violet-400')}</button></li>` : '') +
+        (rx.map(r => `<li class="flex items-center gap-3 py-2.5 ${ui.flash === r.id ? 'row-flash' : ''}">${S.isScan(r) ? S.stack(r) : `<span class="grid h-11 w-9 shrink-0 place-items-center rounded-md ${K.tone('sky')}">${ico('file-text')}</span>`}
+          <div class="min-w-0 flex-1 text-sm"><p class="truncate font-medium">${esc(r.dx)}</p><p class="truncate text-xs text-slate-500">${fmtShort(r.date)} · ${esc(r.doctor)} · ${S.isScan(r) ? `scanned · ${r.pages.length} page${r.pages.length > 1 ? 's' : ''}` : `${r.items.length} medicines`}</p></div>
+          ${badge(...RXS[r.status])}${iconBtn('eye', 'View', `data-pg="${S.isScan(r) ? 'rxs-view' : 'rx-view'}" data-id="${r.id}"`)}</li>`).join('') || '<li class="py-6 text-center text-sm text-slate-500">No prescriptions yet.</li>'),
       labs: labs.map(l => `<li class="flex items-center gap-3 py-2.5"><span class="grid h-8 w-8 place-items-center rounded-lg ${K.tone('violet')}">${ico('flask-round')}</span><div class="flex-1 text-sm"><p class="font-medium">${esc(l.test)}</p><p class="text-xs text-slate-500">${l.id} · ${esc(l.doctor)}</p></div>${labBadge(l.status)}</li>`).join('') || '<li class="py-6 text-center text-sm text-slate-500">No lab orders.</li>',
-      bills: inv.map(i => `<li class="flex items-center gap-3 py-2.5"><span class="grid h-8 w-8 place-items-center rounded-lg ${K.tone('amber')}">${ico('receipt')}</span><div class="flex-1 text-sm"><p class="font-medium">${i.id}</p><p class="text-xs text-slate-500">${fmtShort(i.date)} · ${i.items.map(x => x.desc).join(', ')}</p></div><span class="text-sm font-semibold tabular-nums">${inr(i.total)}</span></li>`).join('') || '<li class="py-6 text-center text-sm text-slate-500">No bills.</li>',
+      bills: inv.map(i => { const open = i.status === 'due' || i.status === 'partial', ph = i.kind === 'pharmacy';
+        return `<li class="flex flex-wrap items-center gap-3 py-2.5"><span class="grid h-9 w-9 place-items-center rounded-lg ${K.tone(ph ? 'emerald' : 'amber')}">${ico(ph ? 'pill' : 'receipt')}</span>
+          <div class="min-w-[160px] flex-1 text-sm"><p class="font-medium"><span class="font-mono text-xs">${i.id}</span> ${ph ? badge('emerald', 'Pharmacy') : ''}</p><p class="truncate text-xs text-slate-500">${fmtShort(i.date)} · ${i.items.map(x => esc(x.desc)).join(', ')}</p></div>
+          <span class="text-right text-sm"><b class="tabular-nums">${inr(i.total)}</b>${open ? `<span class="block text-xs font-semibold text-rose-600">${inr(i.total - i.paid)} due</span>` : ''}</span>
+          ${badge(...({ paid: ['emerald', 'Paid'], partial: ['amber', 'Part paid'], due: ['rose', 'Unpaid'], refunded: ['slate', 'Refunded'] })[i.status])}${iconBtn('eye', 'View invoice', `data-pg="inv-view" data-id="${i.id}"`)}</li>`; }).join('') || '<li class="py-6 text-center text-sm text-slate-500">No bills.</li>',
     };
     modal({ title: p.name, sub: `${p.mrn} · ${p.age} yrs · ${p.gender === 'F' ? 'Female' : 'Male'}`, icon: 'user', tone: p.gender === 'F' ? 'rose' : 'sky', size: 'max-w-2xl',
-      body: `<div class="mb-4">${seg('ptab', tabs, ui.ptab).replace(/data-pg="seg"/g, 'data-pg="ptab"')}</div>${ui.ptab === 'overview' ? bodies.overview : `<ul class="divide-y divide-slate-100 dark:divide-slate-800">${bodies[ui.ptab]}</ul>`}`,
-      foot: `${can('appointment:create') ? btn('ghost', 'Book appointment', 'calendar-plus', 'data-action="new-appointment" data-close-modal') : ''}
+      body: `<div class="mb-4 overflow-x-auto thin-scroll">${seg('ptab', tabs, ui.ptab).replace(/data-pg="seg"/g, 'data-pg="ptab"')}</div>${ui.ptab === 'overview' ? bodies.overview : `<ul class="divide-y divide-slate-100 dark:divide-slate-800">${bodies[ui.ptab]}</ul>`}
+        ${dueAmt && can('payment:collect') ? `<div class="pointer-events-none sticky bottom-0 -mb-2 flex justify-end pt-3"><button type="button" class="pointer-events-auto flex items-center gap-2 rounded-full bg-rose-600 py-1.5 pl-1.5 pr-4 text-sm font-semibold text-white shadow-lg shadow-rose-600/30 transition hover:-translate-y-0.5 hover:bg-rose-700" data-pg="dues-pay" data-mrn="${p.mrn}" data-back="${p.mrn}">
+          <span class="relative grid h-8 w-8 place-items-center rounded-full bg-white/20"><span class="absolute inset-0 animate-ping rounded-full bg-white/25"></span>${ico('wallet', 'relative h-4 w-4')}</span>Collect ${inr(dueAmt)}</button></div>` : ''}`,
+      foot: `${canUp ? btn('ghost', 'Upload prescription', 'camera', `data-pg="rxu-new" data-mrn="${p.mrn}" data-back="${p.mrn}"`) : ''}${can('appointment:create') ? btn('ghost', 'Book appointment', 'calendar-plus', 'data-action="new-appointment" data-close-modal') : ''}
         ${can('invoice:create') ? btn('ghost', 'New invoice', 'receipt', `data-pg="inv-new" data-mrn="${p.mrn}"`) : ''}
         ${can('encounter:write') ? btn('primary', 'Open EMR', 'clipboard-list', 'data-nav="consultations" data-close-modal') : ''}` });
     ui.ptabFor = mrn;
@@ -206,7 +221,8 @@
     const qcard = a => {
       const acts = a.status === 'pending' || a.status === 'confirmed' ? `${btn('soft', 'Check in', 'log-in', `data-pg="q" data-do="checkin" data-id="${a.id}"`, 'h-8 px-2.5')}${iconBtn('user-x', 'Mark no-show', `data-pg="q" data-do="noshow" data-id="${a.id}"`)}`
         : a.status === 'checked-in' ? btn('primary', 'Call in', 'megaphone', `data-pg="q" data-do="call" data-id="${a.id}"`, 'h-8 px-2.5')
-        : a.status === 'with-doctor' ? btn('primary', 'Complete', 'check', `data-pg="q" data-do="done" data-id="${a.id}"`, 'h-8 px-2.5') : apptBadge(a.status);
+        : a.status === 'with-doctor' ? btn('primary', 'Complete', 'check', `data-pg="q" data-do="done" data-id="${a.id}"`, 'h-8 px-2.5')
+        : a.status === 'completed' && can('prescription:upload') && H().modOn('prescriptions') ? `${apptBadge(a.status)}${btn('soft', 'Upload Rx', 'camera', `data-pg="rxu-new" data-mrn="${a.mrn}"`, 'h-8 px-2.5')}` : apptBadge(a.status);
       return `<li class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900 ${ui.qflash === a.id ? 'row-flash' : ''}">
         <div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-900 text-sm font-bold text-white dark:bg-slate-700">${String(a.token).padStart(2, '0')}</span>
           <div class="min-w-0 flex-1"><p class="truncate text-sm font-semibold">${esc(a.patient)}</p><p class="truncate text-xs text-slate-500">${a.time} · ${esc(a.type)} · <span class="font-mono">${a.mrn}</span></p>
@@ -379,19 +395,27 @@
   /* ======================= Prescriptions ======================= */
   const RXS = { issued: ['slate', 'Issued'], sent: ['sky', 'Sent to pharmacy'], dispensed: ['emerald', 'Dispensed'] };
   function renderRx(c) {
-    const d = D(), q = (ui.rxq || '').toLowerCase(), mine = isDoctor();
-    const list = d.prescriptions.filter(r => (!mine || r.doctor === myName()) && (!q || (r.patient + r.id + r.dx).toLowerCase().includes(q)));
+    const d = D(), q = (ui.rxq || '').toLowerCase(), mine = isDoctor(), S = window.PGRxScan, kind = ui.rxkind || 'all';
+    const all = d.prescriptions.filter(r => (!mine || r.doctor === myName()) && (!q || (r.patient + r.id + r.dx + r.mrn).toLowerCase().includes(q)));
+    const list = all.filter(r => kind === 'all' || (kind === 'scan') === S.isScan(r));
+    const canWrite = can('prescription:write'), canUp = can('prescription:upload');
     c.innerHTML = `<div class="fade-in space-y-5">
-      ${tiles([tile('file-text', 'teal', mine ? 'My prescriptions' : 'Prescriptions (7 days)', list.length), tile('send', 'sky', 'Waiting at pharmacy', list.filter(r => r.status === 'sent').length),
-        tile('pill', 'emerald', 'Dispensed', list.filter(r => r.status === 'dispensed').length), tile('message-circle', 'violet', 'Shared on WhatsApp', list.filter(r => r.shared).length)])}
-      <div class="${card}">${toolbar(`${search('rxq', ui.rxq || '', 'Search patient, diagnosis or RX no.')}<span class="flex-1"></span>${btn('primary', 'New prescription', 'plus', 'data-pg="rx-new"')}`)}
+      ${tiles([tile('file-text', 'teal', mine ? 'My prescriptions' : 'Prescriptions (7 days)', all.length), tile('scan-line', 'violet', 'Uploaded from paper', all.filter(S.isScan).length),
+        tile('send', 'sky', 'Waiting at pharmacy', all.filter(r => r.status === 'sent').length), tile('pill', 'emerald', 'Dispensed', all.filter(r => r.status === 'dispensed').length)])}
+      ${canUp ? `<div class="${card} flex flex-wrap items-center gap-4 border-violet-200 bg-gradient-to-r from-violet-50 to-white p-4 dark:border-violet-500/20 dark:from-violet-500/10 dark:to-slate-900">
+        <span class="grid h-11 w-11 place-items-center rounded-xl bg-violet-600 text-white">${ico('camera', 'h-5 w-5')}</span>
+        <div class="min-w-[200px] flex-1"><p class="font-semibold">Doctor wrote it on paper?</p><p class="text-sm text-slate-500">Snap a photo or upload the scan — it’s saved to the patient’s record${S.hasPharmacy() ? ' and sent to the pharmacy' : ''} in one step.</p></div>
+        ${btn('primary', 'Take photo', 'camera', 'data-pg="rxu-new" data-cam="1"', 'h-10 px-4')}${btn('ghost', 'Upload file', 'upload', 'data-pg="rxu-new"', 'h-10 px-4')}</div>` : ''}
+      <div class="${card}">${toolbar(`${search('rxq', ui.rxq || '', 'Search patient, MRN, diagnosis or RX no.')}${K.seg('rxkind', [['all', 'All', all.length], ['typed', 'Typed', all.filter(r => !S.isScan(r)).length], ['scan', 'Scanned', all.filter(S.isScan).length]], kind)}<span class="flex-1"></span>${canWrite ? btn('primary', 'New prescription', 'plus', 'data-pg="rx-new"') : ''}`)}
         ${table(['Prescription', 'Patient', 'Diagnosis', 'Medicines', 'Status', ''], list.map(r => `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 ${ui.flash === r.id ? 'row-flash' : ''}">
           ${td0(`<span class="font-mono text-xs font-semibold">${r.id}</span><span class="block text-xs text-slate-500">${fmtShort(r.date)} · ${esc(r.doctor)}</span>`)}${td(person(r.patient, r.mrn, 'sky'))}
-          ${td(esc(r.dx), 'max-w-[220px] truncate')}${td(r.items.map(i => esc(i.drug.split(' ')[0])).join(', ') + `<span class="block text-xs text-slate-400">${r.items.length} item${r.items.length > 1 ? 's' : ''}</span>`)}${td(badge(...RXS[r.status]))}
-          ${td(`<div class="flex justify-end gap-1">${iconBtn('eye', 'Preview', `data-pg="rx-view" data-id="${r.id}"`)}${iconBtn('message-circle', 'Send on WhatsApp', `data-pg="rx-wa" data-id="${r.id}"`)}${r.status === 'issued' ? iconBtn('send', 'Send to pharmacy', `data-pg="rx-send" data-id="${r.id}"`) : ''}</div>`, 'pr-5')}</tr>`).join(''), { empty: 'No prescriptions yet.' })}</div></div>`;
+          ${td(esc(r.dx), 'max-w-[220px] truncate')}${td(S.isScan(r) ? `<div class="flex items-center gap-2">${S.stack(r, 'h-10 w-8')}<span class="text-xs"><span class="block font-medium text-violet-700 dark:text-violet-300">Scanned</span><span class="text-slate-400">${r.pages.length} page${r.pages.length > 1 ? 's' : ''}${r.items.length ? ` · ${r.items.length} dispensed` : ''}</span></span></div>`
+            : r.items.map(i => esc(i.drug.split(' ')[0])).join(', ') + `<span class="block text-xs text-slate-400">${r.items.length} item${r.items.length > 1 ? 's' : ''}</span>`)}${td(badge(...RXS[r.status]))}
+          ${td(`<div class="flex justify-end gap-1">${iconBtn('eye', 'Preview', `data-pg="rx-view" data-id="${r.id}"`)}${iconBtn('message-circle', 'Send on WhatsApp', `data-pg="rx-wa" data-id="${r.id}"`)}${r.status === 'issued' && H().modOn('pharmacy') ? iconBtn('send', 'Send to pharmacy', `data-pg="rx-send" data-id="${r.id}"`) : ''}</div>`, 'pr-5')}</tr>`).join(''), { empty: kind === 'scan' ? 'No uploaded prescriptions yet.' : 'No prescriptions yet.' })}</div></div>`;
     ui.flash = null;
   }
   function rxSheet(r) {
+    if (window.PGRxScan.isScan(r)) return window.PGRxScan.sheet(r);
     return `<div class="rounded-xl border border-slate-200 p-5 text-sm dark:border-slate-700">
       <div class="flex items-start justify-between border-b border-slate-200 pb-3 dark:border-slate-700"><div><p class="text-base font-bold text-teal-700 dark:text-teal-300">${esc(T().name)}</p><p class="text-xs text-slate-500">${esc(T().branches[0])}</p></div>
         <div class="text-right"><p class="font-semibold">${esc(r.doctor)}</p><p class="text-xs text-slate-500">${esc((T().employees.find(e => e.name === r.doctor) || {}).reg || '')}</p></div></div>
@@ -403,11 +427,12 @@
       <p class="mt-6 text-right text-xs text-slate-400">Digitally signed · verify at ${T().slug}.hms.com/rx/${r.id}</p></div>`;
   }
   on('rx-view', el => { const r = D().prescriptions.find(x => x.id === el.dataset.id);
+    if (window.PGRxScan.isScan(r)) return window.PGRxScan.openViewer(r.id);
     modal({ title: r.id, sub: `${r.patient} · ${fmtDate(r.date)}`, icon: 'file-text', size: 'max-w-xl', body: rxSheet(r),
       foot: `${btn('ghost', 'Print', 'printer', 'data-pg="print"')}${btn('ghost', 'WhatsApp', 'message-circle', `data-pg="rx-wa" data-id="${r.id}"`)}${r.status === 'issued' ? btn('primary', 'Send to pharmacy', 'send', `data-pg="rx-send" data-id="${r.id}" data-close-modal`) : ''}` }); });
   on('print', () => toast('Print', 'Opens the browser print dialog with an A5 layout in the full build.', 'slate', 'printer'));
   on('rx-wa', el => { const r = D().prescriptions.find(x => x.id === el.dataset.id); r.shared = true; toast('Prescription sent', `${r.patient} · WhatsApp (Meta Cloud API) · PDF link valid 7 days`, 'emerald', 'message-circle'); if (!document.getElementById('pgModal').classList.contains('open')) rerender(); });
-  on('rx-send', el => { const r = D().prescriptions.find(x => x.id === el.dataset.id); r.status = 'sent'; ui.flash = r.id; toast('Sent to pharmacy', `${r.id} is in the dispensing queue`, 'sky', 'send'); rerender(); });
+  on('rx-send', el => { const r = D().prescriptions.find(x => x.id === el.dataset.id), ph = window.PGPharmacy.defaultFor(); r.status = 'sent'; r.pharmacy = ph && ph.id; ui.flash = r.id; toast('Sent to pharmacy', `${r.id} is in the ${ph ? ph.name : 'pharmacy'} queue`, 'sky', 'send'); rerender(); });
   on('rx-new', el => openRxComposer(el.dataset.mrn));
   function openRxComposer(mrn) {
     const d = D(); ui.rxItems = [{ drug: d.drugs[0].name, freq: '1-0-1', dur: '5 days', note: 'After food' }];
@@ -431,7 +456,7 @@
         <div class="mt-4 grid gap-4 sm:grid-cols-2">${field('advice', 'Advice', { ph: 'Diet, rest, follow-up in 7 days' })}${field('send', 'After issuing', { opts: [['sent', 'Send to in-house pharmacy'], ['issued', 'Print only'], ['wa', 'Pharmacy + WhatsApp to patient']] })}</div>`,
       onSubmit: f => { const v = readForm(f, ['dx']); if (!v) return false; if (!ui.rxItems.length) { toast('Add a medicine', '', 'amber', 'pill'); return false; }
         const p = d.patients.find(x => x.mrn === v.patient), doc = isDoctor() ? myName() : (p.doctor || T().doctors[0].name);
-        const r = { id: 'RX-' + (7900 + d.prescriptions.length), patient: p.name, mrn: p.mrn, doctor: doc, dept: (T().employees.find(e => e.name === doc) || {}).dept, date: todayISO(), dx: v.dx, items: ui.rxItems.slice(), advice: v.advice, status: v.send === 'issued' ? 'issued' : 'sent', shared: v.send === 'wa' };
+        const r = { id: 'RX-' + (7900 + d.prescriptions.length), patient: p.name, mrn: p.mrn, doctor: doc, dept: (T().employees.find(e => e.name === doc) || {}).dept, date: todayISO(), dx: v.dx, items: ui.rxItems.slice(), advice: v.advice, status: v.send === 'issued' ? 'issued' : 'sent', shared: v.send === 'wa', pharmacy: v.send === 'issued' ? undefined : (window.PGPharmacy.defaultFor() || {}).id };
         d.prescriptions.unshift(r); ui.flash = r.id;
         audit('file-text', 'sky', `<b>${who()}</b> issued ${r.id} for ${esc(p.name)}`); toast('Prescription issued', `${r.id} · ${r.status === 'sent' ? 'in pharmacy queue' : 'ready to print'}${r.shared ? ' · WhatsApp sent' : ''}`, 'teal', 'file-check');
         if (H().state.active === 'prescriptions') rerender(); } });
@@ -536,10 +561,13 @@
       ${tiles([tile('inbox', 'sky', 'Prescriptions to dispense', queue.length), tile('package-x', 'rose', 'Low / out of stock', low.length), tile('calendar-x', 'amber', 'Expiring in 60 days', exp.length), tile('indian-rupee', 'emerald', 'Stock value', inr(value))])}
       <div class="${card}">${toolbar(`${seg('phtab', [['dispense', 'Dispense', queue.length], ['stock', 'Inventory', d.drugs.length], ['ledger', 'Stock ledger']], tab)}<span class="flex-1"></span>
         ${btn('ghost', 'Counter sale', 'shopping-cart', 'data-pg="ph-otc"')}${btn('primary', 'Receive stock', 'package-plus', 'data-pg="ph-receive"')}`)}
-        ${tab === 'dispense' ? (queue.length ? `<ul class="divide-y divide-slate-100 dark:divide-slate-800">${queue.map(r => `<li class="flex flex-wrap items-center gap-4 px-5 py-4">${person(r.patient, `${r.id} · ${esc(r.doctor)}`, 'sky')}
+        ${tab === 'dispense' ? (queue.length ? `<ul class="divide-y divide-slate-100 dark:divide-slate-800">${queue.map(r => window.PGRxScan.isScan(r) ? `<li class="flex flex-wrap items-center gap-4 px-5 py-4 ${ui.flash === r.id ? 'row-flash' : ''}">${person(r.patient, `${r.id} · ${esc(r.doctor)}`, 'violet')}
+            <div class="flex min-w-[200px] flex-1 items-center gap-3 text-sm">${window.PGRxScan.stack(r)}<span>${badge('violet', 'Paper prescription', 'scan-line')}<span class="mt-0.5 block text-xs text-slate-500">${r.pages.length} page${r.pages.length > 1 ? 's' : ''} · uploaded by ${esc(r.uploadedBy || '—')} ${esc(r.uploadedAt || '')}</span></span></div>
+            ${btn('ghost', 'View', 'eye', `data-pg="rxs-view" data-id="${r.id}"`)}${btn('primary', 'Read & dispense', 'pill', `data-pg="ph-dispense" data-id="${r.id}"`)}</li>`
+          : `<li class="flex flex-wrap items-center gap-4 px-5 py-4">${person(r.patient, `${r.id} · ${esc(r.doctor)}`, 'sky')}
             <div class="min-w-[200px] flex-1 text-sm">${r.items.map(i => { const s = d.drugs.find(x => x.name === i.drug); return `<span class="mr-2 inline-flex items-center gap-1">${esc(i.drug)} ${s && s.stock === 0 ? badge('rose', 'Out') : ''}</span>`; }).join('')}</div>
             <span class="text-sm font-semibold tabular-nums">${inr(rxTotal(r))}</span>${btn('primary', 'Dispense', 'pill', `data-pg="ph-disp" data-id="${r.id}"`)}</li>`).join('')}</ul>`
-          : empty('inbox', 'Queue is clear', 'Prescriptions sent by doctors appear here.'))
+          : empty('inbox', 'Queue is clear', 'Prescriptions sent by doctors — typed or uploaded from paper — appear here.'))
         : tab === 'stock' ? table(['Item', 'Batch · Expiry', 'Price', 'Stock', 'Status', ''], d.drugs.map(x => { const de = daysTo(x.expiry);
             return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 ${ui.flash === x.id ? 'row-flash' : ''}">${td0(`<span class="font-medium">${esc(x.name)}</span><span class="block text-xs text-slate-500">${x.id} · ${x.form}</span>`)}
             ${td(`<span class="font-mono text-xs">${x.batch}</span><span class="block text-xs ${de <= 60 ? 'font-semibold text-amber-600' : 'text-slate-500'}">${fmtDate(x.expiry)}${de <= 60 ? ` · ${de} days` : ''}</span>`)}${td(inr(x.price), 'text-right tabular-nums')}
