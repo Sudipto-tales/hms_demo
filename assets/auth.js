@@ -1,4 +1,4 @@
-/* HMS demo — shared helpers for the sign-in pages (login.html + verify.html).
+/* HMS demo — shared helpers for the sign-in pages (index.html + verify.html).
  * Everything here is front-end only: users, OTPs and device trust are faked
  * in localStorage so the flow can be clicked through without a backend. */
 const Auth = (() => {
@@ -31,6 +31,14 @@ const Auth = (() => {
   const forgetDevice = (uid) => { const t = readTrust(); delete t[uid]; writeTrust(t); };
   const expireDevice = (uid) => { const t = readTrust(); if (t[uid]) { t[uid] = Date.now() - DAY; writeTrust(t); } };
   const fmtDate = (ts) => new Date(ts).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  /* ---------- signed-in session (8 hours) ----------
+   * Read by dashboard.html's head guard; ended by "Sign out" or after 8h. */
+  const SESSION_KEY = 'hms-session';
+  const SESSION_HOURS = 8;
+  const startSession = (u) => { try { localStorage.setItem(SESSION_KEY, JSON.stringify({ uid: u.id, role: u.role, name: u.name, exp: Date.now() + SESSION_HOURS * 36e5 })); } catch (e) {} };
+  const getSession = () => { try { const s = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); if (s && s.exp > Date.now()) return s; localStorage.removeItem(SESSION_KEY); } catch (e) {} return null; };
+  const endSession = () => { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} };
 
   /* ---------- QR session bus (desktop <-> phone) ----------
    * Same-browser demo transport: BroadcastChannel + storage event + polling.
@@ -134,5 +142,6 @@ const Auth = (() => {
   };
 
   return { $, icons, esc, USERS, findUser, userById, maskEmail, maskPhone, initials, TRUST_DAYS, trustedUntil, trustDevice, forgetDevice, expireDevice, fmtDate,
+    startSession, getSession, endSession,
     post, listen, token, genOtp, toast, demoOtpToast, otpBoxes, cooldown, initTheme, device };
 })();

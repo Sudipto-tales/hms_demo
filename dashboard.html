@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HMS Cloud — Dashboard (Demo)</title>
+  <script>
+    // Auth guard: no valid session (signed out, or older than 8h) -> back to the login page.
+    try {
+      const s = JSON.parse(localStorage.getItem('hms-session') || 'null');
+      if (!s || !(s.exp > Date.now())) { localStorage.removeItem('hms-session'); location.replace('index.html'); }
+      else window.HMS_SESSION = s;
+    } catch (e) { location.replace('index.html'); }
+  </script>
+  <script>
+    // Apply saved theme before paint to avoid a flash.
+    try {
+      const t = localStorage.getItem('hms-theme');
+      if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark');
+      if (localStorage.getItem('hms-sb') === '1') document.documentElement.dataset.sb = '1';
+    } catch (e) {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: {
+        fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] },
+        boxShadow: { card: '0 1px 2px rgb(15 23 42 / .04), 0 1px 3px rgb(15 23 42 / .06)' },
+      } },
+    };
+  </script>
+  <link rel="stylesheet" href="assets/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200">
+
+<!-- ================= SIDEBAR ================= -->
+<aside id="sidebar" class="fixed inset-y-0 left-0 z-40 flex flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+  <!-- Brand -->
+  <div class="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 px-5 dark:border-slate-800">
+    <div class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-teal-500 to-cyan-700 text-white shadow-sm">
+      <i data-lucide="heart-pulse" class="h-5 w-5"></i>
+    </div>
+    <div class="sb-label leading-tight">
+      <p class="text-[15px] font-bold tracking-tight text-slate-900 dark:text-white">HMS Cloud</p>
+      <p class="text-[11px] text-slate-500 dark:text-slate-400">Hospital Management</p>
+    </div>
+    <button class="ml-auto rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden dark:hover:bg-slate-800" data-action="close-mobile-sidebar" aria-label="Close menu">
+      <i data-lucide="x" class="h-5 w-5"></i>
+    </button>
+  </div>
+
+  <!-- Tenant / branch switcher -->
+  <div class="relative px-3 pt-3" id="branchSwitcher">
+    <button class="flex w-full items-center gap-2.5 rounded-xl border border-slate-200 p-2 text-left transition hover:border-teal-300 hover:bg-teal-50/40 dark:border-slate-700 dark:hover:border-teal-700 dark:hover:bg-teal-500/5" data-dropdown="branchMenu" aria-haspopup="menu">
+      <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-100 text-sm font-bold text-amber-700 dark:bg-amber-500/15 dark:text-amber-400" id="tenantMark">S</span>
+      <span class="sb-label min-w-0 flex-1">
+        <span class="block truncate text-[13px] font-semibold text-slate-900 dark:text-white" id="tenantName">Sun Hospital</span>
+        <span class="block truncate text-[11px] text-slate-500 dark:text-slate-400" id="branchName">Main Branch</span>
+      </span>
+      <i data-lucide="chevrons-up-down" class="sb-label h-4 w-4 text-slate-400"></i>
+    </button>
+    <div id="branchMenu" class="dropdown absolute left-3 right-3 top-full z-50 mt-1 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800" style="transform-origin: top left" role="menu"></div>
+  </div>
+
+  <!-- Nav -->
+  <nav id="nav" class="thin-scroll flex-1 overflow-y-auto overflow-x-hidden px-3 py-4" aria-label="Main"></nav>
+
+  <!-- Test mode toggle -->
+  <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800">
+    <div id="testModeCard" class="flex items-center gap-3 rounded-xl border border-dashed border-amber-300 bg-amber-50/70 px-3 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/5">
+      <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 tm-icon">
+        <i data-lucide="flask-conical" class="h-4 w-4"></i>
+      </span>
+      <div class="tm-text min-w-0 flex-1">
+        <p class="text-[13px] font-semibold text-slate-900 dark:text-white">Test Mode</p>
+        <p class="truncate text-[11px] text-slate-500 dark:text-slate-400">Demo tools &amp; simulations</p>
+      </div>
+      <button id="testModeSwitch" class="switch amber tm-text" role="switch" aria-checked="false" aria-label="Toggle test mode"></button>
+    </div>
+  </div>
+</aside>
+<div id="sidebarBackdrop" class="fixed inset-0 z-30 hidden bg-slate-900/40 overlay-blur lg:hidden" data-action="close-mobile-sidebar"></div>
+
+<!-- ================= MAIN ================= -->
+<div id="main" class="min-h-screen">
+  <!-- Header -->
+  <header class="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/85 px-4 backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-900/85">
+    <button class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white" data-action="toggle-sidebar" aria-label="Toggle sidebar" title="Toggle sidebar ( [ )">
+      <i data-lucide="panel-left" class="h-5 w-5"></i>
+    </button>
+
+    <button id="searchTrigger" class="hidden h-10 w-full max-w-sm items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-400 transition hover:border-slate-300 md:flex dark:border-slate-700 dark:bg-slate-800/60 dark:hover:border-slate-600" data-action="open-palette">
+      <i data-lucide="search" class="h-4 w-4"></i>
+      <span class="flex-1 text-left">Search patients, doctors, pages…</span>
+      <kbd class="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[11px] text-slate-500 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300">Ctrl K</kbd>
+    </button>
+    <button class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden dark:hover:bg-slate-800" data-action="open-palette" aria-label="Search">
+      <i data-lucide="search" class="h-5 w-5"></i>
+    </button>
+
+    <div class="ml-auto flex items-center gap-1 sm:gap-1.5">
+      <span id="tenantDomain" class="mr-2 hidden items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 xl:inline-flex dark:bg-slate-800 dark:text-slate-300">
+        <i data-lucide="lock" class="h-3 w-3 text-emerald-600"></i><span>sun.hms.com</span>
+      </span>
+
+      <!-- View-as role switcher -->
+      <div class="relative mr-1" id="roleSwitchWrap">
+        <button class="flex h-9 items-center gap-2 whitespace-nowrap rounded-xl border border-slate-200 bg-white pl-1.5 pr-2 text-[13px] font-semibold text-slate-800 shadow-sm transition hover:border-teal-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-teal-700" data-dropdown="roleMenu" aria-haspopup="menu" title="Switch demo role">
+          <span id="roleIcon" class="grid h-6 w-6 place-items-center rounded-lg bg-teal-50 text-teal-700"></span>
+          <span class="hidden font-normal text-slate-500 sm:inline dark:text-slate-400">View as</span>
+          <span id="roleLabel">Admin</span>
+          <i data-lucide="chevron-down" class="h-4 w-4 text-slate-400"></i>
+        </button>
+        <div id="roleMenu" class="dropdown absolute right-0 top-full z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800" role="menu"></div>
+      </div>
+
+      <button class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white" data-action="toggle-theme" aria-label="Toggle dark mode" id="themeBtn">
+        <i data-lucide="moon" class="h-5 w-5"></i>
+      </button>
+
+      <!-- Messages -->
+      <div class="relative hidden sm:block">
+        <button class="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white" data-dropdown="msgMenu" aria-label="Messages">
+          <i data-lucide="message-square" class="h-5 w-5"></i>
+          <span class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-teal-500 ring-2 ring-white dark:ring-slate-900"></span>
+        </button>
+        <div id="msgMenu" class="dropdown absolute right-0 top-full z-50 mt-2 w-80 rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
+          <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+            <p class="text-sm font-semibold">Messages</p><span class="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-medium text-teal-700 dark:bg-teal-500/10 dark:text-teal-300">3 new</span>
+          </div>
+          <div id="msgList" class="max-h-80 overflow-y-auto p-1.5 thin-scroll"></div>
+          <button class="w-full border-t border-slate-100 py-2.5 text-center text-xs font-medium text-teal-700 hover:bg-slate-50 dark:border-slate-700 dark:text-teal-400 dark:hover:bg-slate-700/40" data-action="demo-only">Open inbox</button>
+        </div>
+      </div>
+
+      <!-- Notifications -->
+      <div class="relative" id="notifWrap">
+        <button class="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white" data-dropdown="notifMenu" aria-label="Notifications">
+          <i data-lucide="bell" class="h-5 w-5"></i>
+          <span id="notifBadge" class="absolute -right-0.5 -top-0.5 grid h-[18px] min-w-[18px] place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white ring-2 ring-white dark:ring-slate-900">3</span>
+        </button>
+        <div id="notifMenu" class="dropdown absolute right-0 top-full z-50 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
+          <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+            <p class="text-sm font-semibold">Notifications</p>
+            <button class="text-xs font-medium text-teal-700 hover:underline dark:text-teal-400" data-action="mark-all-read">Mark all read</button>
+          </div>
+          <div id="notifList" class="max-h-96 overflow-y-auto p-1.5 thin-scroll"></div>
+        </div>
+      </div>
+
+      <!-- Language -->
+      <div class="relative hidden sm:block">
+        <button class="flex items-center gap-1 rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-white" data-dropdown="langMenu" aria-label="Language">
+          <i data-lucide="globe" class="h-5 w-5"></i><span id="langLabel" class="text-xs font-semibold">EN</span>
+        </button>
+        <div id="langMenu" class="dropdown absolute right-0 top-full z-50 mt-2 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+          <button class="lang-opt flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-lang="EN">English <i data-lucide="check" class="h-4 w-4 text-teal-600"></i></button>
+          <button class="lang-opt flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-lang="HI">हिन्दी</button>
+          <button class="lang-opt flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-lang="BN">বাংলা</button>
+        </div>
+      </div>
+
+      <!-- Profile -->
+      <div class="relative ml-1">
+        <button class="flex items-center gap-2.5 rounded-xl py-1 pl-1 pr-2 hover:bg-slate-100 dark:hover:bg-slate-800" data-dropdown="profileMenu">
+          <span id="avatar" class="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-teal-100 to-cyan-100 text-[13px] font-bold text-teal-800 dark:from-teal-500/20 dark:to-cyan-500/20 dark:text-teal-200">AS</span>
+          <span class="hidden whitespace-nowrap text-left leading-tight lg:block">
+            <span id="profileName" class="block text-[13px] font-semibold text-slate-900 dark:text-white">Dr. Anita Sen</span>
+            <span id="profileRole" class="block text-[11px] text-slate-500 dark:text-slate-400">Hospital Superadmin</span>
+          </span>
+          <i data-lucide="chevron-down" class="hidden h-4 w-4 text-slate-400 lg:block"></i>
+        </button>
+        <div id="profileMenu" class="dropdown absolute right-0 top-full z-50 mt-2 w-60 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+          <div class="px-3 py-2.5">
+            <p class="text-sm font-semibold" id="pmName">Dr. Anita Sen</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400" id="pmEmail">anita.sen@sun.hms.com</p>
+          </div>
+          <div class="my-1 h-px bg-slate-100 dark:bg-slate-700"></div>
+          <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-action="demo-only"><i data-lucide="user" class="h-4 w-4 text-slate-400"></i>My profile</button>
+          <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-nav="settings"><i data-lucide="settings" class="h-4 w-4 text-slate-400"></i>Settings</button>
+          <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-action="demo-only"><i data-lucide="shield-check" class="h-4 w-4 text-slate-400"></i>Security &amp; MFA</button>
+          <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-action="open-shortcuts"><i data-lucide="keyboard" class="h-4 w-4 text-slate-400"></i>Keyboard shortcuts</button>
+          <div class="my-1 h-px bg-slate-100 dark:bg-slate-700"></div>
+          <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10" data-action="sign-out"><i data-lucide="log-out" class="h-4 w-4"></i>Sign out</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Test mode banner -->
+  <div id="testBanner" class="tm-stripes hidden border-b border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5">
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-[13px] sm:px-6">
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white"><i data-lucide="flask-conical" class="h-3 w-3"></i>Test mode</span>
+      <span class="text-amber-900 dark:text-amber-200">Sample data only — nothing is saved or sent. Viewing <b id="bannerTenant">sun.hms.com</b> as <b id="bannerRole">Superadmin</b>.</span>
+      <span class="ml-auto flex gap-3">
+        <button class="font-semibold text-amber-800 hover:underline dark:text-amber-300" data-action="open-drawer">Open test panel</button>
+        <button class="font-semibold text-amber-800 hover:underline dark:text-amber-300" data-action="test-off">Exit</button>
+      </span>
+    </div>
+  </div>
+
+  <main class="px-4 py-6 sm:px-6 lg:px-8">
+    <!-- Page header -->
+    <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <nav class="mb-1.5 flex items-center gap-1.5 text-[13px] text-slate-500 dark:text-slate-400" aria-label="Breadcrumb">
+          <button class="hover:text-teal-700 dark:hover:text-teal-400" data-nav="dashboard:overview">Home</button>
+          <i data-lucide="chevron-right" class="h-3.5 w-3.5"></i>
+          <span id="crumb" class="font-medium text-slate-700 dark:text-slate-200">Dashboard</span>
+        </nav>
+        <h1 id="pageTitle" class="text-2xl font-bold tracking-tight text-slate-900 sm:text-[28px] dark:text-white">Dashboard</h1>
+        <p id="pageSub" class="mt-1 text-sm text-slate-500 dark:text-slate-400">Hospital overview and today’s activity</p>
+      </div>
+      <div class="flex items-center gap-2" id="pageActions">
+        <div class="relative">
+          <button class="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800" data-dropdown="exportMenu">
+            <i data-lucide="download" class="h-4 w-4"></i>Export<i data-lucide="chevron-down" class="h-4 w-4 text-slate-400"></i>
+          </button>
+          <div id="exportMenu" class="dropdown absolute right-0 top-full z-30 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+            <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-export="pdf"><i data-lucide="file-text" class="h-4 w-4 text-rose-500"></i>PDF report</button>
+            <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-export="csv"><i data-lucide="file-spreadsheet" class="h-4 w-4 text-emerald-600"></i>Appointments (CSV)</button>
+            <button class="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-export="print"><i data-lucide="printer" class="h-4 w-4 text-slate-500"></i>Print</button>
+          </div>
+        </div>
+        <button id="newApptBtn" class="inline-flex h-10 items-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-semibold text-white shadow-sm shadow-teal-600/20 transition hover:bg-teal-700 active:scale-[.98]" data-action="new-appointment">
+          <i data-lucide="plus" class="h-4 w-4"></i>New Appointment
+        </button>
+      </div>
+    </div>
+
+    <!-- ===== Dashboard page ===== -->
+    <section id="page-dashboard">
+      <div id="dashTop"></div>
+      <div id="statsGrid" class="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 2xl:grid-cols-6"
+           data-hint-title="Live KPIs" data-hint="Every number is filtered by tenant and branch, enforced by Postgres row-level security. Cards hide when their module is off or the role lacks permission."></div>
+
+      <div class="dash-row mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <!-- Patient statistics -->
+        <div class="rounded-2xl border border-slate-200 bg-white shadow-card xl:col-span-2 dark:border-slate-800 dark:bg-slate-900" data-perm="patient:read">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+            <div>
+              <h2 class="font-semibold text-slate-900 dark:text-white">Patient Statistics</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Admitted vs discharged</p>
+            </div>
+            <div class="flex rounded-xl bg-slate-100 p-1 text-[13px] font-medium dark:bg-slate-800" role="tablist" id="rangeTabs">
+              <button class="range-tab rounded-lg px-3 py-1.5 transition" data-range="weekly" role="tab">Weekly</button>
+              <button class="range-tab rounded-lg px-3 py-1.5 transition" data-range="monthly" role="tab">Monthly</button>
+              <button class="range-tab rounded-lg px-3 py-1.5 transition" data-range="yearly" role="tab">Yearly</button>
+            </div>
+          </div>
+          <div class="p-5">
+            <div class="relative h-72"><canvas id="patientChart" aria-label="Patient statistics chart" role="img"></canvas></div>
+            <div class="mt-3 flex items-center gap-5 text-xs text-slate-600 dark:text-slate-400">
+              <span class="inline-flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-full bg-teal-600"></span>Admitted</span>
+              <span class="inline-flex items-center gap-1.5"><span class="h-0.5 w-4 border-t-2 border-dashed border-slate-500"></span>Discharged</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appointment statistics -->
+        <div class="rounded-2xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900" data-module="appointments" data-perm="appointment:read">
+          <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+            <div>
+              <h2 class="font-semibold text-slate-900 dark:text-white">Appointment Statistics</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Today, by status</p>
+            </div>
+          </div>
+          <div class="p-5">
+            <div class="relative mx-auto h-56 max-w-[240px]">
+              <canvas id="apptChart" aria-label="Appointments by status" role="img"></canvas>
+              <div class="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                <div><p id="donutTotal" class="text-3xl font-bold text-slate-900 dark:text-white">248</p><p class="text-xs text-slate-500 dark:text-slate-400">appointments</p></div>
+              </div>
+            </div>
+            <div id="donutLegend" class="mt-5 grid grid-cols-2 gap-2 text-[13px]"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-row mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <!-- Revenue -->
+        <div id="revenueCard" class="rounded-2xl border border-slate-200 bg-white shadow-card xl:col-span-2 dark:border-slate-800 dark:bg-slate-900" data-perm="report:finance">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+            <div>
+              <h2 class="font-semibold text-slate-900 dark:text-white">Revenue Overview</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Daily collections, last 14 days</p>
+            </div>
+            <span id="revChip" class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"></span>
+          </div>
+          <div class="p-5"><div class="relative h-64"><canvas id="revenueChart" aria-label="Revenue chart" role="img"></canvas></div></div>
+        </div>
+
+        <!-- Bed occupancy -->
+        <div id="bedCard" class="rounded-2xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900" data-module="ipd" data-perm="bed:manage">
+          <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+            <div>
+              <h2 class="font-semibold text-slate-900 dark:text-white">Bed Occupancy</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400" id="bedSummary"></p>
+            </div>
+            <button class="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-teal-500/10" data-nav="beds">Bed board</button>
+          </div>
+          <div id="wardList" class="space-y-4 p-5"></div>
+        </div>
+      </div>
+
+      <div class="dash-row mt-5 grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <!-- Today's appointments -->
+        <div id="apptCard" class="rounded-2xl border border-slate-200 bg-white shadow-card xl:col-span-2 dark:border-slate-800 dark:bg-slate-900" data-module="appointments" data-perm="appointment:read"
+             data-hint-title="Appointment lifecycle" data-hint="booked → checked-in → in-progress → completed (or no-show / cancelled). Each change is audited and can notify the patient through the configured channel.">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+            <div>
+              <h2 class="font-semibold text-slate-900 dark:text-white">Today’s Appointments</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400" id="apptDate"></p>
+            </div>
+            <div class="relative">
+              <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"></i>
+              <input id="apptSearch" type="search" placeholder="Filter by patient or doctor" class="h-9 w-56 rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none transition focus:border-teal-400 focus:bg-white focus:ring-4 focus:ring-teal-500/10 dark:border-slate-700 dark:bg-slate-800 dark:focus:bg-slate-800" />
+            </div>
+          </div>
+          <div class="flex gap-1 overflow-x-auto border-b border-slate-100 px-4 thin-scroll dark:border-slate-800" id="statusTabs"></div>
+          <div class="relative overflow-x-auto thin-scroll">
+            <table class="w-full min-w-[720px] text-left text-sm">
+              <thead class="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <tr class="border-b border-slate-100 dark:border-slate-800">
+                  <th class="px-5 py-3 font-semibold">Time</th>
+                  <th class="px-3 py-3 font-semibold">Patient</th>
+                  <th class="px-3 py-3 font-semibold">Doctor</th>
+                  <th class="px-3 py-3 font-semibold">Type</th>
+                  <th class="px-3 py-3 font-semibold">Status</th>
+                  <th class="px-5 py-3"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="apptBody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+            </table>
+          </div>
+          <div id="apptEmpty" class="hidden px-5 py-12 text-center text-sm text-slate-500">No appointments match this filter.</div>
+        </div>
+
+        <div class="side-stack space-y-5">
+          <!-- Doctors on duty -->
+          <div class="rounded-2xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900" data-perm="doctor:read">
+            <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+              <h2 class="font-semibold text-slate-900 dark:text-white">Doctors on Duty</h2>
+              <span id="dutyCount" class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"></span>
+            </div>
+            <ul id="doctorList" class="divide-y divide-slate-100 dark:divide-slate-800"></ul>
+          </div>
+          <!-- Activity -->
+          <div class="rounded-2xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900" data-perm="audit:read"
+               data-hint-title="Audit trail" data-hint="Every read/write of patient data is written to an append-only audit log (who, what, when, which branch). This feed is a friendly view of it.">
+            <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+              <h2 class="font-semibold text-slate-900 dark:text-white">Recent Activity</h2>
+              <span class="text-[11px] text-slate-400">from audit log</span>
+            </div>
+            <ul id="activityList" class="space-y-4 p-5"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Placeholder page (other modules) ===== -->
+    <section id="page-placeholder" class="hidden"></section>
+
+    <footer class="mt-10 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-5 text-xs text-slate-400 dark:border-slate-800">
+      <span>© 2026 HMS Cloud · Demo build</span>
+      <span>Tenant data isolated by subdomain + row-level security</span>
+    </footer>
+  </main>
+</div>
+
+<!-- ================= TEST MODE FLOATING TAB ================= -->
+<button id="testFab" class="fixed right-0 top-1/2 z-40 flex flex-col items-center gap-2 rounded-l-2xl bg-amber-500 px-2.5 py-4 text-white shadow-lg shadow-amber-600/30 hover:bg-amber-600" data-action="open-drawer" aria-label="Open test panel">
+  <span class="relative grid place-items-center">
+    <span class="fab-ping absolute h-7 w-7 rounded-full bg-amber-300"></span>
+    <span class="relative grid h-7 w-7 place-items-center rounded-full bg-white/20"><i data-lucide="flask-conical" class="h-4 w-4"></i></span>
+  </span>
+  <span class="text-[11px] font-bold uppercase tracking-widest [writing-mode:vertical-rl] rotate-180">Test panel</span>
+</button>
+
+<!-- ================= TEST DRAWER ================= -->
+<div id="drawerBackdrop" class="fixed inset-0 z-50 bg-slate-900/30" data-action="close-drawer"></div>
+<aside id="testDrawer" class="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900" aria-label="Test panel">
+  <div class="flex items-center gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+    <span class="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400"><i data-lucide="flask-conical" class="h-5 w-5"></i></span>
+    <div class="flex-1">
+      <p class="font-semibold text-slate-900 dark:text-white">Test panel</p>
+      <p class="text-xs text-slate-500 dark:text-slate-400">Show clients how each feature behaves</p>
+    </div>
+    <button class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" data-action="close-drawer" aria-label="Close"><i data-lucide="x" class="h-5 w-5"></i></button>
+  </div>
+  <div class="flex gap-1 border-b border-slate-200 px-4 dark:border-slate-800" role="tablist">
+    <button class="drawer-tab -mb-px border-b-2 px-3 py-2.5 text-sm font-medium" data-tab="guide">Guide</button>
+    <button class="drawer-tab -mb-px border-b-2 px-3 py-2.5 text-sm font-medium" data-tab="simulate">Simulate</button>
+    <button class="drawer-tab -mb-px border-b-2 px-3 py-2.5 text-sm font-medium" data-tab="configure">Configure</button>
+  </div>
+  <div class="thin-scroll flex-1 overflow-y-auto p-5">
+    <!-- Guide -->
+    <div class="drawer-pane space-y-4" data-pane="guide">
+      <div id="featureInfo" class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700"></div>
+      <button class="flex w-full items-center gap-3 rounded-2xl bg-teal-600 p-4 text-left text-white shadow-sm hover:bg-teal-700" data-action="start-tour">
+        <span class="grid h-9 w-9 place-items-center rounded-xl bg-white/15"><i data-lucide="play" class="h-4 w-4"></i></span>
+        <span class="flex-1"><span class="block text-sm font-semibold">Start guided tour</span><span class="block text-xs text-teal-100">8 steps · walks through the dashboard</span></span>
+        <i data-lucide="arrow-right" class="h-4 w-4"></i>
+      </button>
+      <div class="flex items-center gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+        <span class="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/10"><i data-lucide="lightbulb" class="h-4 w-4"></i></span>
+        <div class="flex-1"><p class="text-sm font-semibold">Feature hints</p><p class="text-xs text-slate-500 dark:text-slate-400">Pulsing dots explain how each part works</p></div>
+        <button id="hintSwitch" class="switch amber" role="switch" aria-checked="false" aria-label="Feature hints"></button>
+      </div>
+      <div class="rounded-2xl border border-slate-200 p-4 dark:border-slate-700">
+        <p class="mb-3 text-sm font-semibold">Keyboard shortcuts</p>
+        <dl id="shortcutList" class="space-y-2 text-[13px]"></dl>
+      </div>
+    </div>
+
+    <!-- Simulate -->
+    <div class="drawer-pane space-y-2.5" data-pane="simulate">
+      <p class="mb-1 text-xs text-slate-500 dark:text-slate-400">Each action changes the dashboard live, so the client sees the effect.</p>
+      <div id="simList" class="space-y-2.5"></div>
+    </div>
+
+    <!-- Configure -->
+    <div class="drawer-pane space-y-6" data-pane="configure">
+      <section>
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Tenant (hospital)</p>
+        <div id="tenantOptions" class="grid grid-cols-2 gap-2"></div>
+      </section>
+      <section>
+        <p class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">View as role</p>
+        <div id="roleOptions" class="space-y-1.5"></div>
+      </section>
+      <section>
+        <div class="mb-2 flex items-center justify-between">
+          <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">Plan &amp; modules</p>
+          <div class="flex rounded-lg bg-slate-100 p-0.5 text-xs font-medium dark:bg-slate-800" id="planTabs"></div>
+        </div>
+        <div id="moduleList" class="divide-y divide-slate-100 rounded-2xl border border-slate-200 dark:divide-slate-800 dark:border-slate-700"></div>
+      </section>
+      <button class="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800" data-action="reset-demo">
+        <i data-lucide="rotate-ccw" class="h-4 w-4"></i>Reset demo data
+      </button>
+    </div>
+  </div>
+  <div class="border-t border-slate-200 px-5 py-3 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400">
+    Sample data only — nothing leaves this browser.
+  </div>
+</aside>
+
+<!-- ================= MODALS ================= -->
+<!-- New appointment -->
+<div id="apptModal" class="modal fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-slate-900/50 p-4 overlay-blur" role="dialog" aria-modal="true" aria-labelledby="apptModalTitle">
+  <form id="apptForm" class="modal-panel w-full max-w-xl rounded-2xl bg-white shadow-2xl dark:bg-slate-900" novalidate>
+    <div class="flex items-start justify-between border-b border-slate-100 px-6 py-5 dark:border-slate-800">
+      <div>
+        <h3 id="apptModalTitle" class="text-lg font-semibold text-slate-900 dark:text-white">New appointment</h3>
+        <p class="text-sm text-slate-500 dark:text-slate-400" id="apptModalSub">Book a slot. The patient gets a WhatsApp confirmation.</p>
+      </div>
+      <button type="button" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800" data-close-modal aria-label="Close"><i data-lucide="x" class="h-5 w-5"></i></button>
+    </div>
+    <div class="grid gap-4 px-6 py-5 sm:grid-cols-2">
+      <label class="sm:col-span-2">
+        <span class="mb-1.5 block text-sm font-medium">Patient name <span class="text-rose-500">*</span></span>
+        <input name="patient" list="patientOptions" autocomplete="off" placeholder="Search or type a new patient" class="field" />
+        <datalist id="patientOptions"></datalist>
+        <span class="err mt-1 hidden text-xs text-rose-600">Enter the patient’s name.</span>
+      </label>
+      <label>
+        <span class="mb-1.5 block text-sm font-medium">Mobile number <span class="text-rose-500">*</span></span>
+        <input name="phone" inputmode="tel" placeholder="98300 12345" class="field" />
+        <span class="err mt-1 hidden text-xs text-rose-600">Enter a 10-digit mobile number.</span>
+      </label>
+      <label>
+        <span class="mb-1.5 block text-sm font-medium">Doctor <span class="text-rose-500">*</span></span>
+        <select name="doctor" class="field"></select>
+        <span class="err mt-1 hidden text-xs text-rose-600">Choose a doctor.</span>
+      </label>
+      <label>
+        <span class="mb-1.5 block text-sm font-medium">Date</span>
+        <input name="date" type="date" class="field" />
+      </label>
+      <div>
+        <span class="mb-1.5 block text-sm font-medium">Visit type</span>
+        <div class="flex rounded-xl bg-slate-100 p-1 text-[13px] font-medium dark:bg-slate-800" id="visitType">
+          <button type="button" class="vt flex-1 rounded-lg py-1.5" data-vt="OPD">OPD</button>
+          <button type="button" class="vt flex-1 rounded-lg py-1.5" data-vt="Follow-up">Follow-up</button>
+          <button type="button" class="vt flex-1 rounded-lg py-1.5" data-vt="Teleconsult">Tele</button>
+        </div>
+      </div>
+      <div class="sm:col-span-2">
+        <span class="mb-1.5 block text-sm font-medium">Time slot <span class="text-rose-500">*</span></span>
+        <div id="slotGrid" class="grid grid-cols-4 gap-2 sm:grid-cols-6"></div>
+        <span class="err mt-1 hidden text-xs text-rose-600" id="slotErr">Pick a time slot.</span>
+      </div>
+      <label class="sm:col-span-2">
+        <span class="mb-1.5 block text-sm font-medium">Notes</span>
+        <textarea name="notes" rows="2" placeholder="Reason for visit (optional)" class="field resize-none"></textarea>
+      </label>
+      <label class="flex items-center gap-2.5 text-sm sm:col-span-2">
+        <input type="checkbox" name="notify" checked class="h-4 w-4 rounded border-slate-300 accent-teal-600" />
+        Send confirmation on WhatsApp
+      </label>
+    </div>
+    <div class="flex justify-end gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-4 dark:border-slate-800 dark:bg-slate-800/30 rounded-b-2xl">
+      <button type="button" class="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800" data-close-modal>Cancel</button>
+      <button type="submit" class="inline-flex h-10 items-center gap-2 rounded-xl bg-teal-600 px-4 text-sm font-semibold text-white hover:bg-teal-700" id="apptSubmit">
+        <i data-lucide="calendar-plus" class="h-4 w-4"></i><span>Book appointment</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- Appointment details -->
+<div id="detailModal" class="modal fixed inset-0 z-[60] grid place-items-center bg-slate-900/50 p-4 overlay-blur" role="dialog" aria-modal="true">
+  <div class="modal-panel w-full max-w-md rounded-2xl bg-white shadow-2xl dark:bg-slate-900" id="detailBody"></div>
+</div>
+
+<!-- Confirm -->
+<div id="confirmModal" class="modal fixed inset-0 z-[70] grid place-items-center bg-slate-900/50 p-4 overlay-blur" role="alertdialog" aria-modal="true">
+  <div class="modal-panel w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+    <span id="confirmIcon" class="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-500/10"><i data-lucide="triangle-alert" class="h-5 w-5"></i></span>
+    <h3 id="confirmTitle" class="text-lg font-semibold text-slate-900 dark:text-white">Are you sure?</h3>
+    <p id="confirmText" class="mt-1.5 text-sm text-slate-500 dark:text-slate-400"></p>
+    <div class="mt-6 flex justify-end gap-2">
+      <button class="h-10 rounded-xl border border-slate-200 px-4 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" data-close-modal>Cancel</button>
+      <button id="confirmOk" class="h-10 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white hover:bg-rose-700">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Command palette -->
+<div id="paletteModal" class="modal fixed inset-0 z-[70] flex items-start justify-center bg-slate-900/50 p-4 pt-[12vh] overlay-blur" role="dialog" aria-modal="true" aria-label="Search">
+  <div class="modal-panel w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+    <div class="flex items-center gap-3 border-b border-slate-100 px-4 dark:border-slate-800">
+      <i data-lucide="search" class="h-5 w-5 text-slate-400"></i>
+      <input id="paletteInput" class="h-14 flex-1 bg-transparent text-[15px] outline-none placeholder:text-slate-400" placeholder="Search patients, doctors, pages, actions…" autocomplete="off" />
+      <kbd class="rounded-md border border-slate-200 px-1.5 py-0.5 text-[11px] text-slate-500 dark:border-slate-700">Esc</kbd>
+    </div>
+    <div id="paletteList" class="thin-scroll max-h-[50vh] overflow-y-auto p-2"></div>
+    <div class="flex items-center gap-4 border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-500 dark:border-slate-800">
+      <span><kbd class="font-sans">↑↓</kbd> navigate</span><span><kbd class="font-sans">↵</kbd> open</span><span><kbd class="font-sans">Esc</kbd> close</span>
+    </div>
+  </div>
+</div>
+
+<!-- Shortcuts -->
+<div id="shortcutModal" class="modal fixed inset-0 z-[70] grid place-items-center bg-slate-900/50 p-4 overlay-blur" role="dialog" aria-modal="true">
+  <div class="modal-panel w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+    <div class="mb-4 flex items-center justify-between"><h3 class="text-lg font-semibold">Keyboard shortcuts</h3>
+      <button class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" data-close-modal aria-label="Close"><i data-lucide="x" class="h-5 w-5"></i></button></div>
+    <dl id="shortcutList2" class="space-y-2.5 text-sm"></dl>
+  </div>
+</div>
+
+<!-- Full-screen system overlays (session eviction / tenant suspended) -->
+<div id="systemOverlay" class="modal fixed inset-0 z-[90] grid place-items-center bg-slate-950/80 p-4 overlay-blur" role="alertdialog" aria-modal="true">
+  <div class="modal-panel w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-2xl dark:bg-slate-900" id="systemBody"></div>
+</div>
+
+<!-- Tooltip (collapsed sidebar), tour, hints, row menu, toasts -->
+<div id="tip" class="pointer-events-none fixed z-[95] hidden rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg dark:bg-slate-700"></div>
+<div id="rowMenu" class="dropdown fixed z-[55] w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800"></div>
+<div id="tourSpot" class="hidden"></div>
+<div id="tourPop" class="fixed z-[85] hidden w-80 max-w-[calc(100vw-2rem)] rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700"></div>
+<div id="hintPop" class="fixed z-[85] hidden w-72 rounded-xl bg-slate-900 p-4 text-white shadow-2xl dark:bg-slate-800 dark:ring-1 dark:ring-slate-700"></div>
+<div id="toasts" class="pointer-events-none fixed right-4 top-20 z-[100] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2"></div>
+
+<style type="text/tailwindcss">
+  .field { @apply h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-teal-400 focus:ring-4 focus:ring-teal-500/10 dark:border-slate-700 dark:bg-slate-800; }
+  textarea.field { @apply h-auto py-2; }
+  .field.invalid { @apply border-rose-400 ring-4 ring-rose-500/10; }
+  .adm-select { @apply h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-teal-400 focus:ring-4 focus:ring-teal-500/10 dark:border-slate-700 dark:bg-slate-800; }
+  .nav-link { @apply flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white; }
+  .nav-link.active { @apply bg-teal-50 text-teal-700 dark:bg-teal-500/10 dark:text-teal-300; }
+  .sub-link { @apply relative block w-full rounded-lg py-2 pl-11 pr-3 text-left text-[13px] text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white; }
+  .sub-link.active { @apply bg-teal-50 font-semibold text-teal-700 dark:bg-teal-500/10 dark:text-teal-300; }
+  .sub-link.active::before { content: ''; @apply absolute left-[22px] top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-teal-600; }
+  .range-tab.active, .vt.active { @apply bg-white text-teal-700 shadow-sm dark:bg-slate-700 dark:text-teal-300; }
+  .range-tab:not(.active), .vt:not(.active) { @apply text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white; }
+  .drawer-tab.active { @apply border-amber-500 text-slate-900 dark:text-white; }
+  .drawer-tab:not(.active) { @apply border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white; }
+  .slot { @apply rounded-lg border border-slate-200 py-2 text-[13px] font-medium transition hover:border-teal-400 dark:border-slate-700; }
+  .slot.active { @apply border-teal-600 bg-teal-600 text-white; }
+  .slot:disabled { @apply cursor-not-allowed border-dashed text-slate-300 line-through hover:border-slate-200 dark:text-slate-600; }
+</style>
+
+<script src="assets/data.js"></script>
+<script src="assets/admin.js"></script>
+<script src="assets/pages-kit.js"></script>
+<script src="assets/pages-care.js"></script>
+<script src="assets/pages-ops.js"></script>
+<script src="assets/pages-people.js"></script>
+<script src="assets/pages-dash.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="assets/pages-admin.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

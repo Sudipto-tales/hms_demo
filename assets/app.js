@@ -65,7 +65,7 @@
   /* ---------------- state ---------------- */
   let TENANTS = makeTenants();
   const state = {
-    tenant: 'sun', branch: 0, role: 'admin',
+    tenant: 'sun', branch: 0, role: ({ admin: 'admin', doctor: 'doctor', reception: 'receptionist' })[window.HMS_SESSION?.role] || 'admin',
     modules: new Set(PLANS.pro.modules), plan: 'pro',
     active: 'dashboard:overview', open: new Set(['dashboard']),
     range: 'monthly', filter: 'all', query: '',
@@ -752,7 +752,7 @@
       closeDrawer();
       systemScreen({ icon: 'monitor-smartphone', tone: 'amber', title: 'You were signed out',
         text: `This account just signed in on another device (Chrome · Android, Kolkata). Only one active session is allowed per account.`,
-        foot: 'Single-session rule · Doc 06 §3', btn: 'Sign in again', onBtn: () => toast('Signed in', 'The other device has now been signed out.', 'teal', 'log-in') });
+        foot: 'Single-session rule · Doc 06 §3', btn: 'Sign in again', onBtn: signOut });
     }
     if (id === 'suspend') {
       closeDrawer();
@@ -760,6 +760,12 @@
         text: 'All sessions for this hospital were ended in real time by the platform administrator. Contact support to restore access. No data has been deleted.',
         foot: `${t.slug}.hms.com · tenant.suspended · Doc 06 §4`, btn: 'Reactivate (as SaaS admin)', onBtn: () => toast('Tenant reactivated', `${t.slug}.hms.com is back online`, 'emerald', 'circle-check') });
     }
+  }
+
+  /* End the session (see Auth.startSession in assets/auth.js) and return to the login page. */
+  function signOut() {
+    try { localStorage.removeItem('hms-session'); } catch (e) {}
+    location.replace('index.html');
   }
 
   let systemCb = null;
@@ -1039,7 +1045,7 @@
         case 'reset-demo': return confirmDialog({ title: 'Reset demo data?', text: 'Restores tenants, roles, modules and sample data to their starting values.', ok: 'Reset', tone: 'teal', icon: 'rotate-ccw', onOk: resetDemo });
         case 'open-shortcuts': return openModal('shortcutModal');
         case 'sign-out': return confirmDialog({ title: 'Sign out?', text: `You’ll be signed out of ${T().slug}.hms.com on this device.`, ok: 'Sign out', icon: 'log-out',
-          onOk: () => systemScreen({ icon: 'log-out', tone: 'teal', title: 'Signed out', text: 'Your session has ended. In the real app you would land on the hospital’s login page.', foot: 'Demo', btn: 'Sign back in', onBtn: () => toast('Welcome back', ROLES[state.role].person, 'teal', 'log-in') }) });
+          onOk: signOut });
         case 'demo-only': closeDropdowns(); return toast('Coming in the full build', 'This control is a placeholder in the demo.', 'slate', 'info');
       }
     });
